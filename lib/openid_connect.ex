@@ -159,8 +159,8 @@ defmodule OpenIDConnect do
   This verification will assert the token's encryption against the provider's
   JSON Web Key (JWK)
   """
-  def verify(provider, jwt, name \\ :openid_connect) do
-    jwk = jwk(provider, name)
+  def verify(provider, jwt, tenant \\ :default, name \\ :openid_connect) do
+    jwk = jwk(provider, tenant, name)
 
     with {:ok, protected} <- peek_protected(jwt),
          {:ok, decoded_protected} <- Jason.decode(protected),
@@ -185,17 +185,15 @@ defmodule OpenIDConnect do
     end
   end
 
-  @spec update_documents(list) :: success(documents) | error(:update_documents)
+  @spec update_documents(uri) :: success(documents) | error(:update_documents)
   @doc """
   Requests updated documents from the provider
 
   This function is used by `OpenIDConnect.Worker` for document updates
   according to the lifetime returned by the provider
   """
-  def update_documents(config) do
-    uri = discovery_document_uri(config)
-
-    with {:ok, discovery_document, _} <- fetch_resource(uri),
+  def update_documents(discovery_document_uri) do
+    with {:ok, discovery_document, _} <- fetch_resource(discovery_document_uri),
          {:ok, certs, remaining_lifetime} <- fetch_resource(discovery_document["jwks_uri"]),
          {:ok, jwk} <- from_certs(certs) do
       {:ok,
@@ -270,8 +268,8 @@ defmodule OpenIDConnect do
     GenServer.call(name, {:discovery_document, provider})
   end
 
-  defp jwk(provider, name) do
-    GenServer.call(name, {:jwk, provider})
+  defp jwk(provider, tenant, name) do
+    GenServer.call(name, {:jwk, provider, tenant})
   end
 
   defp config(provider, name) do
@@ -337,10 +335,6 @@ defmodule OpenIDConnect do
     provider
     |> discovery_document(name)
     |> Map.get("response_types_supported")
-  end
-
-  defp discovery_document_uri(config) do
-    Keyword.get(config, :discovery_document_uri)
   end
 
   defp fetch_resource(uri) do
